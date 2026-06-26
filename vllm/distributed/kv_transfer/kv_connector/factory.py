@@ -88,6 +88,11 @@ KVConnectorFactory.register_connector(
     "SharedStorageConnector")
 
 KVConnectorFactory.register_connector(
+    "MimirConnector",
+    "vllm.distributed.kv_transfer.kv_connector.v1.mimir_connector",
+    "MimirConnector")
+
+KVConnectorFactory.register_connector(
     "P2pNcclConnector",
     "vllm.distributed.kv_transfer.kv_connector.v1.p2p.p2p_nccl_connector",
     "P2pNcclConnector")
