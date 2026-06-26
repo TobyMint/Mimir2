@@ -12,9 +12,13 @@ dist/
 build/
 *.egg
 
-# vLLM build artifacts
+# vLLM build artifacts (downloaded deps + generated sources)
+.deps/
 vllm/_version.py
 vllm/version.py.bak
+vllm/vllm_flash_attn/
+csrc/moe/marlin_moe_wna16/kernel_*.cu
+csrc/quantization/gptq_marlin/kernel_*.cu
 *.cu.o
 *.cpp.o
 .ninja_log
