@@ -1,2 +1,27 @@
-# Papers (to be set up later)
+# Papers (private reference materials)
 papers/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# vLLM build artifacts
+vllm/_version.py
+vllm/version.py.bak
+*.cu.o
+*.cpp.o
+.ninja_log
+.ninja_deps
+build_debug/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
