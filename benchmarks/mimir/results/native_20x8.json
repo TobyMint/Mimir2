@@ -1,0 +1,49 @@
+{
+  "label": "native_20x8",
+  "num_agents": 20,
+  "arrival_rate": 2.0,
+  "scale": 8.0,
+  "wall_total_s": 72.77,
+  "job_completion_s": {
+    "median": 39.914,
+    "mean": 39.919,
+    "p90": 49.273,
+    "max": 69.567,
+    "samples": [
+      9.832,
+      25.501,
+      31.836,
+      30.94,
+      31.738,
+      34.673,
+      34.896,
+      37.321,
+      43.249,
+      38.354,
+      40.213,
+      39.873,
+      45.068,
+      39.954,
+      43.486,
+      48.304,
+      48.643,
+      49.273,
+      55.649,
+      69.567
+    ]
+  },
+  "ttft_s": {
+    "median": 2.929,
+    "mean": 3.274,
+    "p50": 2.929,
+    "p90": 4.292,
+    "n": 153
+  },
+  "pressure_evidence": {
+    "gpu_kv_usage_max": 38.0,
+    "gpu_kv_usage_mean": 18.5,
+    "prefix_hit_rate_last": 99.1,
+    "preempted_count": 0,
+    "samples": 14
+  }
+}

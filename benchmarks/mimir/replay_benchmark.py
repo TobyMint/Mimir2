@@ -51,14 +51,38 @@ from pathlib import Path
 
 import httpx
 
-FILLER = ("In the study of large language model inference, KV cache "
-          "management is the central problem. ")
+FILLERS = [
+    "In the study of large language model inference, KV cache management is "
+    "the central problem being addressed by this work. ",
+    "Agents that interleave reasoning and tool calls accumulate long contexts "
+    "across turns, making memory reuse a key efficiency concern. ",
+    "Resource-constrained serving requires careful eviction and reload of "
+    "attention state to keep latency bounded under contention. ",
+    "The paged attention design divides the key-value buffer into fixed-size "
+    "blocks that can be allocated and freed on demand per request. ",
+    "Multi-turn workloads differ from single-shot generation because their "
+    "prefixes are reused across steps separated by tool-call gaps. ",
+]
 
 
-def tokens_to_text(n_tokens: int) -> str:
-    """Roughly n_tokens of neutral filler (~22 tokens/sentence for Qwen3)."""
+def _filler_for(agent_id: int) -> str:
+    """Pick a filler text per agent so different agents do NOT share a prefix.
+
+    If every agent used the same filler, vLLM's prefix cache would trivially
+    hit across agents (they share the identical text prefix), producing a fake
+    ~99% hit rate that is not real cross-turn reuse. Per-agent distinct
+    fillers keep prefix-cache hits honest: only the same agent's own growing
+    prefix across its turns should hit.
+    """
+    return FILLERS[agent_id % len(FILLERS)]
+
+
+def tokens_to_text(n_tokens: int, agent_id: int = 0) -> str:
+    """Roughly n_tokens of neutral filler (~22 tokens/sentence for Qwen3),
+    using a per-agent filler so distinct agents don't share a prefix."""
+    filler = _filler_for(agent_id)
     n = max(1, n_tokens // 22)
-    return FILLER * n
+    return filler * n
 
 
 class Trace:
@@ -129,7 +153,7 @@ async def run_agent(client: httpx.AsyncClient, base_url: str, model: str,
     """
     start = time.perf_counter()
     for turn in trace.turns:
-        prompt = tokens_to_text(turn["prompt_tokens"])
+        prompt = tokens_to_text(turn["prompt_tokens"], agent_id)
         body = {
             "model": model,
             "prompt": prompt,
