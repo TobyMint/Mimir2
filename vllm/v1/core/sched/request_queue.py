@@ -16,6 +16,7 @@ class SchedulingPolicy(Enum):
     """Enum for scheduling policies."""
     FCFS = "fcfs"
     PRIORITY = "priority"
+    MIMIR = "mimir"
 
 
 class RequestQueue(ABC):
@@ -219,6 +220,10 @@ def create_request_queue(policy: SchedulingPolicy) -> RequestQueue:
     if policy == SchedulingPolicy.PRIORITY:
         return PriorityRequestQueue()
     elif policy == SchedulingPolicy.FCFS:
+        return FCFSRequestQueue()
+    elif policy == SchedulingPolicy.MIMIR:
+        # Mimir uses FCFS ordering; pin/TTL is handled in the scheduler, not
+        # the queue. (A pinned-priority queue is a later optimization.)
         return FCFSRequestQueue()
     else:
         raise ValueError(f"Unknown scheduling policy: {policy}")

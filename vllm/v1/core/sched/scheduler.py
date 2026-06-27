@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import itertools
+import os
 import time
 from collections import defaultdict
 from collections.abc import Iterable
@@ -116,12 +117,26 @@ class Scheduler(SchedulerInterface):
             self.policy = SchedulingPolicy.PRIORITY
         elif self.scheduler_config.policy == "fcfs":
             self.policy = SchedulingPolicy.FCFS
+        elif self.scheduler_config.policy == "mimir":
+            self.policy = SchedulingPolicy.MIMIR
         else:
             raise ValueError(
                 f"Unknown scheduling policy: {self.scheduler_config.policy}")
         # Priority queues for requests.
         self.waiting = create_request_queue(self.policy)
         self.running: list[Request] = []
+
+        # Mimir: pinned requests (KV retained in GPU across a tool-call gap).
+        # Each entry is (request, expiry_time). On request finish, if the
+        # request belongs to a multi-turn agent (job_id set) and is not its
+        # last step, we pin its KV for a TTL window so the next turn of the
+        # same agent reuses it (prefix cache hit) instead of recomputing.
+        # When TTL expires, the KV is freed (v1: dropped; later: offloaded to
+        # CPU via the connector for reload). TTL is fixed for now; a
+        # tool-call-duration estimator is a later optimization.
+        self.pinned_requests: list[tuple[Request, float]] = []
+        self.mimir_pin_ttl: float = float(
+            os.environ.get("MIMIR_PIN_TTL", "2.0"))
 
         # The request IDs that are finished in between the previous and the
         # current steps. This is used to notify the workers about the finished
@@ -177,7 +192,7 @@ class Scheduler(SchedulerInterface):
     def schedule(self) -> SchedulerOutput:
         # NOTE(woosuk) on the scheduling algorithm:
         # There's no "decoding phase" nor "prefill phase" in the scheduler.
-        # Each request just has the num_computed_tokens and
+        # Each request just has num_computed_tokens and
         # num_tokens_with_spec. num_tokens_with_spec =
         # len(prompt_token_ids) + len(output_token_ids) + len(spec_token_ids).
         # At each step, the scheduler tries to assign tokens to the requests
@@ -185,6 +200,11 @@ class Scheduler(SchedulerInterface):
         # num_tokens_with_spec. This is general enough to cover
         # chunked prefills, prefix caching, speculative decoding,
         # and the "jump decoding" optimization in the future.
+
+        # Mimir: expire pinned requests whose TTL has elapsed, freeing their
+        # KV (or offloading to CPU, in a later version) before scheduling.
+        if self.policy == SchedulingPolicy.MIMIR:
+            self._mimir_expire_pins()
 
         scheduled_new_reqs: list[Request] = []
         scheduled_resumed_reqs: list[Request] = []
@@ -1151,10 +1171,56 @@ class Scheduler(SchedulerInterface):
         if self.finished_req_ids_dict is not None:
             self.finished_req_ids_dict[request.client_index].add(request_id)
 
+        # Mimir: pin the KV of a finished multi-turn agent step so the next
+        # turn of the same job reuses it. We keep the request (and its blocks)
+        # alive in pinned_requests instead of freeing now; a later schedule
+        # step frees it when its TTL expires (or offloads to CPU, later).
+        if (self.policy == SchedulingPolicy.MIMIR
+                and request.job_id is not None
+                and not request.is_last_step
+                and not delay_free_blocks):
+            self._pin_request(request)
+            return kv_xfer_params
+
         if not delay_free_blocks:
             self._free_blocks(request)
 
         return kv_xfer_params
+
+    def _pin_request(self, request: Request) -> None:
+        """Pin a finished request's KV in GPU for a TTL window."""
+        expiry = time.time() + self.mimir_pin_ttl
+        self.pinned_requests.append((request, expiry))
+        # NOTE: we intentionally do NOT remove the request from self.requests
+        # or free its blocks here. The KV stays resident so the next turn of
+        # the same job_id hits the prefix cache. We must keep the Request
+        # object retrievable so _free_blocks can run later on TTL expiry.
+        logger.info(
+            "Mimir pin job_id=%s req=%s ttl=%.1fs expiry=%.1f",
+            request.job_id, request.request_id, self.mimir_pin_ttl, expiry)
+
+    def _mimir_expire_pins(self) -> None:
+        """Free KV of pinned requests whose TTL has expired.
+
+        Called at the start of each schedule step. v1 simply frees (drops)
+        the KV; a later version will offload to CPU via the connector before
+        freeing, so the next turn can reload instead of recompute.
+        """
+        if not self.pinned_requests:
+            return
+        now = time.time()
+        still_pinned = []
+        for request, expiry in self.pinned_requests:
+            if now >= expiry:
+                # TTL expired: free the KV (drop in v1; offload later).
+                if request.request_id in self.requests:
+                    self._free_blocks(request)
+                logger.info(
+                    "Mimir unpin(expiry) job_id=%s req=%s",
+                    request.job_id, request.request_id)
+            else:
+                still_pinned.append((request, expiry))
+        self.pinned_requests = still_pinned
 
     def _free_blocks(self, request: Request):
         assert request.is_finished()

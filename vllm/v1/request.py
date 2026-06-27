@@ -20,6 +20,16 @@ if TYPE_CHECKING:
     from vllm.v1.core.kv_cache_utils import BlockHash
 
 
+def _coerce_bool(v) -> Optional[bool]:
+    """Coerce a vllm_xargs value (str/int/float) to bool, since vllm_xargs
+    does not allow bool values directly. Returns None if v is None."""
+    if v is None:
+        return None
+    if isinstance(v, str):
+        return v.lower() in ("1", "true", "yes", "last")
+    return bool(v)
+
+
 class Request:
 
     def __init__(
@@ -39,6 +49,8 @@ class Request:
         trace_headers: Optional[Mapping[str, str]] = None,
         block_hasher: Optional[Callable[["Request"],
                                         list["BlockHash"]]] = None,
+        job_id: Optional[str] = None,
+        is_last_step: Optional[bool] = None,
     ) -> None:
         self.request_id = request_id
         self.client_index = client_index
@@ -60,6 +72,13 @@ class Request:
         # P/D: Connector-specific KV transfer parameters.
         self.kv_transfer_params: Optional[dict[str, Any]] = None
 
+        # Mimir: agent-program metadata for multi-turn pin/TTL. job_id groups
+        # the turns of one agent program; is_last_step marks the final turn
+        # (no pin needed after it). Both arrive via sampling_params.extra_args
+        # (set by the OpenAI server from the request's vllm_xargs extra_body).
+        self.job_id: Optional[str] = job_id
+        self.is_last_step: Optional[bool] = is_last_step
+
         if pooling_params is not None:
             # Pooling models.
             self.max_tokens = 1
@@ -74,6 +93,10 @@ class Request:
             if sampling_params.extra_args is not None:
                 self.kv_transfer_params = \
                     sampling_params.extra_args.get("kv_transfer_params")
+                # Mimir: extract agent metadata passed via vllm_xargs.
+                self.job_id = sampling_params.extra_args.get("job_id")
+                self.is_last_step = _coerce_bool(
+                    sampling_params.extra_args.get("is_last_step"))
         else:
             raise ValueError(
                 "sampling_params and pooling_params can't both be unset")
@@ -141,6 +164,13 @@ class Request:
             priority=request.priority,
             trace_headers=request.trace_headers,
             block_hasher=block_hasher,
+            job_id=(request.sampling_params.extra_args.get("job_id")
+                    if request.sampling_params
+                    and request.sampling_params.extra_args else None),
+            is_last_step=_coerce_bool(request.sampling_params.extra_args.get(
+                              "is_last_step"))
+                          if request.sampling_params
+                          and request.sampling_params.extra_args else None,
         )
 
     def append_output_token_ids(
