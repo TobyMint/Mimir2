@@ -29,3 +29,5 @@ build_debug/
 .idea/
 .vscode/
 .DS_Store
+benchmarks/mimir/data/
+benchmarks/mimir/traces/

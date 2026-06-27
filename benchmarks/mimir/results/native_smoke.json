@@ -1,0 +1,24 @@
+{
+  "label": "native_smoke",
+  "num_agents": 2,
+  "arrival_rate": 1.0,
+  "scale": 4.0,
+  "wall_total_s": 7.2,
+  "job_completion_s": {
+    "median": 4.628,
+    "mean": 4.628,
+    "p90": 6.15,
+    "max": 6.15,
+    "samples": [
+      3.107,
+      6.15
+    ]
+  },
+  "ttft_s": {
+    "median": 0.182,
+    "mean": 0.165,
+    "p50": 0.183,
+    "p90": 0.247,
+    "n": 16
+  }
+}
