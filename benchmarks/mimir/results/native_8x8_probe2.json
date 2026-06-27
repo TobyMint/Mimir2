@@ -1,0 +1,37 @@
+{
+  "label": "native_8x8_probe2",
+  "num_agents": 8,
+  "arrival_rate": 2.0,
+  "scale": 8.0,
+  "wall_total_s": 117.68,
+  "job_completion_s": {
+    "median": 101.123,
+    "mean": 88.943,
+    "p90": 115.517,
+    "max": 117.17,
+    "samples": [
+      11.194,
+      70.214,
+      88.442,
+      97.64,
+      106.762,
+      104.607,
+      115.517,
+      117.17
+    ]
+  },
+  "ttft_s": {
+    "median": 7.663,
+    "mean": 10.61,
+    "p50": 7.663,
+    "p90": 23.415,
+    "n": 57
+  },
+  "pressure_evidence": {
+    "gpu_kv_usage_max": 97.6,
+    "gpu_kv_usage_mean": 44.6,
+    "prefix_hit_rate_last": 10.0,
+    "preempted_count": 0,
+    "samples": 24
+  }
+}

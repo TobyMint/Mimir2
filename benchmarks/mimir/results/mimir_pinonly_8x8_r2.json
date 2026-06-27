@@ -1,0 +1,37 @@
+{
+  "label": "mimir_pinonly_8x8_r2",
+  "num_agents": 8,
+  "arrival_rate": 2.0,
+  "scale": 8.0,
+  "wall_total_s": 113.01,
+  "job_completion_s": {
+    "median": 98.921,
+    "mean": 87.07,
+    "p90": 111.846,
+    "max": 112.199,
+    "samples": [
+      11.407,
+      66.324,
+      87.325,
+      95.512,
+      102.329,
+      111.846,
+      109.614,
+      112.199
+    ]
+  },
+  "ttft_s": {
+    "median": 8.447,
+    "mean": 10.348,
+    "p50": 8.447,
+    "p90": 22.437,
+    "n": 57
+  },
+  "pressure_evidence": {
+    "gpu_kv_usage_max": 98.3,
+    "gpu_kv_usage_mean": 57.9,
+    "prefix_hit_rate_last": 3.9,
+    "preempted_count": 0,
+    "samples": 24
+  }
+}
