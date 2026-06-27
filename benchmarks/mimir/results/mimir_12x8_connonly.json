@@ -1,0 +1,41 @@
+{
+  "label": "mimir_12x8_connonly",
+  "num_agents": 12,
+  "arrival_rate": 2.0,
+  "scale": 8.0,
+  "wall_total_s": 1456.04,
+  "job_completion_s": {
+    "median": NaN,
+    "mean": NaN,
+    "p90": 1451.537,
+    "max": 1452.069,
+    "samples": [
+      101.783,
+      789.013,
+      1042.519,
+      1046.522,
+      1122.13,
+      1125.932,
+      NaN,
+      NaN,
+      1405.103,
+      NaN,
+      1451.537,
+      1452.069
+    ]
+  },
+  "ttft_s": {
+    "median": 87.774,
+    "mean": 136.236,
+    "p50": 73.765,
+    "p90": 346.315,
+    "n": 86
+  },
+  "pressure_evidence": {
+    "gpu_kv_usage_max": 99.9,
+    "gpu_kv_usage_mean": 75.7,
+    "prefix_hit_rate_last": 20.7,
+    "preempted_count": 0,
+    "samples": 146
+  }
+}
