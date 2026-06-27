@@ -137,6 +137,10 @@ class Scheduler(SchedulerInterface):
         self.pinned_requests: list[tuple[Request, float]] = []
         self.mimir_pin_ttl: float = float(
             os.environ.get("MIMIR_PIN_TTL", "2.0"))
+        # Mimir: per-job history of tool-call durations, used by _set_up_pin
+        # to decide whether a tool is short enough to pin for (Continuum's
+        # set_up_pin records per-function; we record per-job).
+        self._job_tool_history: dict[str, list[float]] = {}
 
         # The request IDs that are finished in between the previous and the
         # current steps. This is used to notify the workers about the finished
@@ -1175,21 +1179,57 @@ class Scheduler(SchedulerInterface):
         # turn of the same job reuses it. We keep the request (and its blocks)
         # alive in pinned_requests instead of freeing now; a later schedule
         # step frees it when its TTL expires (or offloads to CPU, later).
+        #
+        # Pin decision mirrors Continuum's actual set_up_pin (not its paper's
+        # cost model, which the release does not implement): pin for a fixed
+        # TTL only when this step called a tool whose historical duration is
+        # short enough that the KV is likely to be reused before expiry. Long
+        # tools -> no pin (KV would sit idle wasting GPU). has_tool_call and
+        # the per-job tool duration come from vllm_xargs since our replayed
+        # requests don't emit real tool-call text to parse.
         if (self.policy == SchedulingPolicy.MIMIR
                 and request.job_id is not None
                 and not request.is_last_step
                 and not delay_free_blocks):
-            self._pin_request(request)
-            return kv_xfer_params
+            ttl = self._set_up_pin(request)
+            if ttl > 0:
+                self._pin_request(request, ttl)
+                return kv_xfer_params
 
         if not delay_free_blocks:
             self._free_blocks(request)
 
         return kv_xfer_params
 
-    def _pin_request(self, request: Request) -> None:
+    def _set_up_pin(self, request: Request) -> float:
+        """Decide a TTL (seconds) to pin this request's KV, or 0 to not pin.
+
+        Mirrors Continuum's set_up_pin: pin for a fixed TTL only if this step
+        called a tool and that tool's historical avg duration is below the
+        threshold (so the next turn likely returns within the TTL window).
+        Updates the per-job tool-duration history from the recorded gap.
+        """
+        has_tool_call = bool(request.extra_args_meta.get("has_tool_call")
+                             ) if request.extra_args_meta else False
+        if not has_tool_call:
+            return 0.0
+        tool_dur = (request.extra_args_meta.get("tool_duration")
+                    if request.extra_args_meta else None)
+        # Record this tool's duration for the job (Continuum records per-func;
+        # we record per-job since our replay doesn't name real tools).
+        if tool_dur is not None and request.job_id is not None:
+            self._job_tool_history.setdefault(request.job_id, []).append(
+                float(tool_dur))
+        hist = self._job_tool_history.get(request.job_id, [])
+        avg = sum(hist) / len(hist) if hist else 0.0
+        # Continuum: if avg tool duration > TTL threshold, don't pin.
+        if avg > self.mimir_pin_ttl:
+            return 0.0
+        return self.mimir_pin_ttl
+
+    def _pin_request(self, request: Request, ttl: float) -> None:
         """Pin a finished request's KV in GPU for a TTL window."""
-        expiry = time.time() + self.mimir_pin_ttl
+        expiry = time.time() + ttl
         self.pinned_requests.append((request, expiry))
         # NOTE: we intentionally do NOT remove the request from self.requests
         # or free its blocks here. The KV stays resident so the next turn of
@@ -1197,7 +1237,7 @@ class Scheduler(SchedulerInterface):
         # object retrievable so _free_blocks can run later on TTL expiry.
         logger.info(
             "Mimir pin job_id=%s req=%s ttl=%.1fs expiry=%.1f",
-            request.job_id, request.request_id, self.mimir_pin_ttl, expiry)
+            request.job_id, request.request_id, ttl, expiry)
 
     def _mimir_expire_pins(self) -> None:
         """Free KV of pinned requests whose TTL has expired.

@@ -152,13 +152,32 @@ async def run_agent(client: httpx.AsyncClient, base_url: str, model: str,
     matter. Returns job completion time; records per-turn TTFT.
     """
     start = time.perf_counter()
-    for turn in trace.turns:
+    n_turns = len(trace.turns)
+    for turn_idx, turn in enumerate(trace.turns):
         prompt = tokens_to_text(turn["prompt_tokens"], agent_id)
+        is_last_step = 1 if turn_idx == n_turns - 1 else 0
+        has_tool = 1 if turn["has_tool_call"] else 0
+        # Sample this turn's tool latency now, so we can pass it to the
+        # scheduler (it needs the duration to decide pinning BEFORE the gap
+        # starts) and then sleep for it after the request completes.
+        tool_dur = sample_tool_latency(rng) if turn["has_tool_call"] else 0.0
         body = {
             "model": model,
             "prompt": prompt,
             "max_tokens": turn["decode_tokens"],  # real decode length
             "temperature": 0,
+            # Mimir agent metadata: job_id groups one agent's turns so the
+            # scheduler can pin KV across the tool gap; is_last_step suppresses
+            # pinning after the final turn; has_tool_call + tool_duration let
+            # the scheduler decide whether to pin (Continuum's set_up_pin).
+            # Top-level vllm_xargs (not extra_body) because vLLM reads it from
+            # the request body, and vllm_xargs forbids bool so use 0/1.
+            "vllm_xargs": {
+                "job_id": f"agent_{agent_id}",
+                "is_last_step": is_last_step,
+                "has_tool_call": has_tool,
+                "tool_duration": round(tool_dur, 3),
+            },
         }
         t0 = time.perf_counter()
         r = await client.post(f"{base_url}/v1/completions", json=body,
@@ -167,9 +186,10 @@ async def run_agent(client: httpx.AsyncClient, base_url: str, model: str,
         ttft = time.perf_counter() - t0
         ttfts.append(ttft)
         # Tool-call gap: only on turns that actually called a tool (the last
-        # turn gives the final answer and has no tool call).
+        # turn gives the final answer and has no tool call). Sleep the
+        # duration we already sampled and passed to the scheduler.
         if turn["has_tool_call"]:
-            await asyncio.sleep(sample_tool_latency(rng))
+            await asyncio.sleep(tool_dur)
     return time.perf_counter() - start
 
 

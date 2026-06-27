@@ -78,6 +78,10 @@ class Request:
         # (set by the OpenAI server from the request's vllm_xargs extra_body).
         self.job_id: Optional[str] = job_id
         self.is_last_step: Optional[bool] = is_last_step
+        # Mimir: extra per-turn metadata for the pin decision (has_tool_call,
+        # tool_duration). Replaces Continuum's LLM-output tool parsing, since
+        # our replayed requests don't emit real tool-call text.
+        self.extra_args_meta: dict[str, Any] = {}
 
         if pooling_params is not None:
             # Pooling models.
@@ -97,6 +101,16 @@ class Request:
                 self.job_id = sampling_params.extra_args.get("job_id")
                 self.is_last_step = _coerce_bool(
                     sampling_params.extra_args.get("is_last_step"))
+                # has_tool_call / tool_duration for the pin decision.
+                ea = sampling_params.extra_args
+                if "has_tool_call" in ea or "tool_duration" in ea:
+                    self.extra_args_meta = {
+                        k: ea[k] for k in ("has_tool_call", "tool_duration")
+                        if k in ea
+                    }
+                    if "has_tool_call" in self.extra_args_meta:
+                        self.extra_args_meta["has_tool_call"] = _coerce_bool(
+                            self.extra_args_meta["has_tool_call"])
         else:
             raise ValueError(
                 "sampling_params and pooling_params can't both be unset")

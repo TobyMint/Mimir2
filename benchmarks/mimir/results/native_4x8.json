@@ -1,0 +1,33 @@
+{
+  "label": "native_4x8",
+  "num_agents": 4,
+  "arrival_rate": 2.0,
+  "scale": 8.0,
+  "wall_total_s": 56.22,
+  "job_completion_s": {
+    "median": 41.845,
+    "mean": 38.101,
+    "p90": 55.704,
+    "max": 55.704,
+    "samples": [
+      13.011,
+      36.878,
+      46.812,
+      55.704
+    ]
+  },
+  "ttft_s": {
+    "median": 2.966,
+    "mean": 3.598,
+    "p50": 2.966,
+    "p90": 5.94,
+    "n": 25
+  },
+  "pressure_evidence": {
+    "gpu_kv_usage_max": 35.5,
+    "gpu_kv_usage_mean": 28.9,
+    "prefix_hit_rate_last": 78.4,
+    "preempted_count": 0,
+    "samples": 6
+  }
+}
